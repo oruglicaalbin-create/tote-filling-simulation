@@ -1,0 +1,42 @@
+sku_id,category,description,length_mm,width_mm,height_mm,unit_weight_kg,typical_inbound_qty_min,typical_inbound_qty_max,demand_share
+LMP-01,lamps,LED bulb E27 9 W in single box,60,60,115,0.06,50,200,0.05
+LMP-02,lamps,LED candle bulb E14 in single box,45,45,110,0.035,50,200,0.05
+LMP-03,lamps,LED spot GU10 4-pack,110,105,55,0.22,20,100,0.04
+LMP-04,lamps,LED downlight in box,120,120,80,0.25,20,100,0.04
+LMP-05,lamps,G9 LED capsule 10-pack,80,50,30,0.03,20,100,0.02
+LMP-06,lamps,LED tube T8 1200 mm (long goods),1250,40,40,0.25,25,100,0.01
+PNL-01,led_panels,LED panel 300x300 in box,330,330,45,1.6,10,40,0.02
+PNL-02,led_panels,LED strip 5 m roll in box,120,120,30,0.15,20,100,0.02
+PNL-03,led_panels,LED surface light round 250 mm,270,270,90,1.1,10,40,0.02
+SOC-01,sockets_switches,Flush wall socket single,85,85,45,0.08,50,200,0.04
+SOC-02,sockets_switches,Surface double socket IP44,160,85,55,0.25,20,100,0.03
+SOC-03,sockets_switches,Flush light switch,85,85,40,0.06,50,200,0.04
+SOC-04,sockets_switches,Flush wall socket 10-pack,270,95,95,0.9,10,40,0.02
+JB-01,junction_boxes,Junction box IP65 100x100,105,105,65,0.12,30,150,0.03
+JB-02,junction_boxes,Junction box IP65 10-pack carton,330,215,115,1.3,5,30,0.02
+JB-03,junction_boxes,Flush mounting box bag of 10,250,180,70,0.4,10,50,0.03
+JB-04,junction_boxes,Junction box IP65 large,190,140,70,0.45,10,50,0.02
+GL-01,cable_glands,Cable gland M20 plastic bag of 50,200,150,50,0.45,10,50,0.03
+GL-02,cable_glands,Cable gland M25 brass box of 10,120,80,60,0.9,10,40,0.02
+GL-03,cable_glands,Cable gland M32 brass box of 5,120,80,60,1.1,10,40,0.01
+TB-01,connectors,Lever connector 3-pole box of 100,120,80,45,0.25,20,100,0.03
+TB-02,connectors,DIN rail terminal block 4 mm2 box of 50,100,70,50,0.35,10,50,0.03
+TB-03,connectors,Terminal strip 12-way bag of 10,150,100,30,0.2,10,50,0.02
+TB-04,connectors,Brass earth bar 10-way box of 10,160,90,50,1.8,5,30,0.01
+TB-05,connectors,Copper cable lug 16 mm2 box of 100,120,80,50,0.9,10,40,0.02
+FU-01,fuses,Circuit breaker C16 1-pole,95,20,80,0.12,24,120,0.04
+FU-02,fuses,Fuse D02 16 A box of 10,120,50,40,0.15,10,50,0.02
+FU-03,fuses,NH00 fuse link 63 A box of 3,95,90,55,0.4,10,40,0.01
+FU-04,fuses,Residual current device 4-pole 40 A,80,75,95,0.4,10,50,0.02
+CT-01,cable_ties,Cable tie 200 x 4.8 bag of 100,230,80,15,0.15,20,100,0.03
+CT-02,cable_ties,Cable tie 370 x 4.8 bag of 100,400,90,15,0.25,20,100,0.02
+CT-03,cable_ties,Cable tie 140 x 3.6 bag of 100,160,70,10,0.05,20,100,0.02
+CR-01,cable_reels,Installation cable 3x1.5 50 m coil,250,250,100,6.8,5,20,0.02
+CR-02,cable_reels,Installation cable 3x2.5 50 m coil,270,270,110,9.0,5,20,0.01
+CR-03,cable_reels,Single wire 1.5 mm2 100 m coil,200,200,70,1.9,5,30,0.02
+CR-04,cable_reels,Telecom cable 100 m on small reel,220,220,150,4.5,5,20,0.01
+SCR-01,screws_anchors,Wood screw 4.5x50 box of 500,160,110,60,1.4,10,40,0.03
+SCR-02,screws_anchors,Nylon anchor 8 mm box of 100,140,90,55,0.3,10,50,0.03
+SCR-03,screws_anchors,Steel concrete anchor M10 box of 50,150,100,70,2.2,5,30,0.02
+SCR-04,screws_anchors,Hex bolt M10x40 box of 100,150,110,70,3.5,5,30,0.01
+SCR-05,screws_anchors,Steel pipe clip 20 mm box of 100,180,120,80,1.5,10,40,0.02
