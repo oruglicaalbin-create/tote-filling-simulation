@@ -40,7 +40,7 @@ Status column: **open** = still to be confirmed or checked.
 | Q | Answer | How it is used |
 |---|---|---|
 | 2 Tote limit | Does not remember. Albin chose 15 kg as the base value. | Base max load 15 kg. **Assumption, not a recollection.** The 35 kg Cuby figure stays as the upper end of the sensitivity range. At 15 kg, 17 of 35 SKUs are weight-bound (7 at 35 kg). |
-| 3 Mixed totes | **Albin's recollection:** products could be mixed, depending on the product. | Remainder-tote design (brief decision D10). Full totes stay single-SKU. Packing efficiency of the mixed tote is an assumption and is varied. |
+| 3 Mixed totes | **Albin's recollection (corrected the same day):** a tote always held one product. Sometimes a divider went in the middle, and the system was told which side held which product. (His first answer, "products could be mixed", was withdrawn.) | Divided-tote design (brief decision D10). Each half holds one SKU. |
 | 4 Overweight totes | **Albin's recollection:** the conveyor did not accept an overweight tote. The worker had to redo the tote before pushing it onto the conveyor again. | Overweight check at induction. A rejected tote returns to the worker, who removes units (time `t_rework`) and resubmits. Removed units go into the next tote. |
 | 5 Handling time | **Albin's recollection:** about 3-5 minutes per tote, depending a lot on how complex the delivery is. | Mean total time per tote calibrated to about 4 min. The split into fetch, decide and per-unit time is an assumption. |
 | 5b Stations and staff | **Albin's recollection:** about 4 stations, one worker in each. | The model simulates one station with one worker. Arrival rate is per station. An extra worker means a second station. |
@@ -68,10 +68,12 @@ All handling times are means. Each draw is gamma-distributed with CV 0.3 (assump
 | Judgement fill factor F | triangular(0.65, 0.85, 1.10) per tote | Albin's recollection: workers underfilled. The upper tail lets about 9 % of totes be filled above capacity, so overweight happens sometimes | Assumption | **Yes, headline sweep of the mode** |
 | How F works | Worker puts round(F × n_max) units in a tote, at most what physically fits | A worker can see volume but cannot see weight. So only weight-bound SKUs can be overweight | Modelling choice | No |
 | Overweight rework | Units removed until the tote is under the limit | Simplification: after rework the tote is exactly at the weight bound | Modelling choice | No |
-| Mixing (remainder tote) | On. Leftover of a line goes into a shared open tote if it fits | D10 | Modelling choice | Yes: on / off |
-| Mixed-tote volume efficiency | 80 % of tote volume | Mixed shapes leave gaps | Assumption | Planned |
-| Judgement in mixed totes | Adds the leftover if it fits within F × limits | Same F as for single-SKU totes | Modelling choice | With F |
+| Dividers | On. A leftover that fits in half a tote goes into one half of a divided tote. The other half takes the next leftover that fits, then the tote is sent | D10, mechanism from Albin's recollection | Modelling choice | Yes: on / off |
+| Half-tote size | 280 × 360 × 200 mm (divider across the length) | Albin said "right side" and "left side" | Assumption | No |
+| Half capacity | Packing rule on the half tote. The weight limit stays the whole tote's (15 kg) | Same grid rule as a full tote | Modelling choice | With max load |
+| Second half | Filled only if the combined weight looks OK: exact for the rule, F × limit for judgement. Otherwise the open tote is sent with one half empty | | Modelling choice | With F |
+| How often dividers are used | Whenever a leftover fits in a half, in both scenarios | Albin said "sometimes". Using the same policy in both scenarios keeps the rule-vs-judgement difference about filling only | Assumption | On / off |
 | Lifter | 9 s per tote (400 cycles/h), buffer 10 totes | 2016 press figure, indicative only. Albin's recollection: never a bottleneck | Public figure + Albin's recollection | No |
-| Lead time | Arrival until the worker has put all units of the line in totes | With mixing, the last units may wait in an open tote, so "until inducted" is not defined | Modelling choice | No |
+| Lead time | Arrival until the worker has put all units of the line in totes | With dividers, the last units may wait in an open half-filled tote, so "until inducted" is not defined | Modelling choice | No |
 | Random numbers | Separate streams for arrivals, fill factors and handling times. Fill and time streams are per order line | Common random numbers: the same line gets the same draws in every scenario | Method | No |
 

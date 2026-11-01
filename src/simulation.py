@@ -3,9 +3,9 @@
 What happens in the model:
 - Order lines (one SKU, Q units) arrive as a Poisson process during one shift.
 - They wait in a queue until a worker is free. Each worker fills totes for the line.
-- Full totes are single-SKU. With mixing on, the leftover units of a line go into
-  a shared "remainder tote" that stays open at the station until the next leftover
-  does not fit (decision D10 in CLAUDE.md).
+- Every tote compartment holds one SKU. With dividers on, a small leftover of a line
+  goes into one half of a divided tote. The other half takes the next leftover that
+  fits, then the tote is sent (decision D10 in CLAUDE.md).
 - A tote is pushed onto the conveyor. An overweight tote is rejected there and the
   worker reworks it: removes units, pushes it again. Removed units go into the next tote.
 - Accepted totes wait in a small buffer and the lifter takes them into storage.
@@ -58,8 +58,7 @@ class Params:
     # Station
     n_workers: int = 1
     filling: str = "rule"  # "rule" or "judgement"
-    mixing: bool = True
-    mixed_volume_efficiency: float = 0.8  # share of tote volume usable when SKUs are mixed
+    dividers: bool = True  # a divider splits the tote length into two halves
     # Judgement fill factor F ~ triangular(low, mode, high), drawn per tote
     f_low: float = 0.65
     f_mode: float = 0.85
@@ -83,6 +82,11 @@ class Params:
         return Tote(self.tote_length_mm, self.tote_width_mm, self.tote_height_mm, self.max_load_kg)
 
     @property
+    def half_tote(self) -> Tote:
+        """One compartment of a divided tote. The weight limit is still the whole tote's."""
+        return Tote(self.tote_length_mm / 2, self.tote_width_mm, self.tote_height_mm, self.max_load_kg)
+
+    @property
     def lifter_time(self) -> float:
         return 60.0 / self.lifter_cycles_per_h
 
@@ -94,6 +98,8 @@ class Sku:
     volume_mm3: float
     n_max: int        # packing rule result
     n_geometry: int   # most units that physically fit (grid bound)
+    n_max_half: int       # packing rule in one half of a divided tote (0 = does not fit)
+    n_geometry_half: int
     qty_min: int
     qty_max: int
     share: float
@@ -111,7 +117,7 @@ class OrderLine:
 class ToteLoad:
     """Contents of one tote: a list of [sku index, units]."""
 
-    kind: str  # "single" or "mixed"
+    kind: str  # "single" or "divided"
     contents: list[list[int]] = field(default_factory=list)
     weight_kg: float = 0.0
     volume_mm3: float = 0.0
@@ -134,10 +140,12 @@ def load_catalogue(params: Params, path: Path = CATALOGUE_PATH) -> list[Sku]:
     for row, share in zip(df.itertuples(), shares):
         item = Item(row.length_mm, row.width_mm, row.height_mm, row.unit_weight_kg)
         packing = units_per_tote(item, params.tote)
+        half = units_per_tote(item, params.half_tote)
         if not packing.fits:
             continue  # cannot go into the system at all
         skus.append(Sku(row.sku_id, row.unit_weight_kg, item.volume_mm3, packing.n_max,
-                        packing.n_geometry, row.typical_inbound_qty_min,
+                        packing.n_geometry, half.n_max, half.n_geometry,
+                        row.typical_inbound_qty_min,
                         row.typical_inbound_qty_max, share))
     return skus
 
@@ -193,9 +201,8 @@ class Station:
         self.env = simpy.Environment()
         self.line_queue = simpy.Store(self.env)
         self.buffer = simpy.Store(self.env, capacity=params.buffer_capacity)
-        self.mixed_volume_cap = params.mixed_volume_efficiency * params.tote.usable_volume_mm3
 
-        self.open_mixed: dict[int, ToteLoad | None] = {w: None for w in range(params.n_workers)}
+        self.open_divided: dict[int, ToteLoad | None] = {w: None for w in range(params.n_workers)}
         self.busy = {w: dict.fromkeys(ACTIVITIES, 0.0) for w in range(params.n_workers)}
         self.workers_left = params.n_workers
         self.lifter_working = False
@@ -229,27 +236,33 @@ class Station:
             return 1.0
         return triangular_from_uniform(u, self.p.f_low, self.p.f_mode, self.p.f_high)
 
-    def target_units(self, sku: Sku, f: float) -> int:
-        """Units the worker puts in a fresh single-SKU tote.
+    @staticmethod
+    def judged_units(n_max: int, n_geometry: int, f: float) -> int:
+        """Units the worker puts in a tote (or a half) whose true capacity is n_max.
 
         The worker cannot put in more than physically fits (n_geometry), but can
         exceed the weight limit without noticing.
         """
-        judged = max(1, math.floor(sku.n_max * f + 0.5))
-        return min(judged, sku.n_geometry)
+        if n_max <= 0:
+            return 0
+        judged = max(1, math.floor(n_max * f + 0.5))
+        return min(judged, n_geometry)
 
-    def looks_like_it_fits(self, tote: ToteLoad, sku_index: int, units: int, f: float) -> bool:
-        """Does the worker add `units` to a mixed tote?
+    def target_units(self, sku: Sku, f: float) -> int:
+        """Units for a fresh single-SKU tote."""
+        return self.judged_units(sku.n_max, sku.n_geometry, f)
 
-        Rule (f = 1): exact weight check, volume check with the mixing efficiency.
-        Judgement: the same checks against f times the limits. Volume can never be
-        exceeded physically, weight can.
-        """
-        sku = self.skus[sku_index]
-        weight = tote.weight_kg + units * sku.weight_kg
-        volume = tote.volume_mm3 + units * sku.volume_mm3
-        return (weight <= f * self.p.max_load_kg + _EPS
-                and volume <= min(f, 1.0) * self.mixed_volume_cap + _EPS)
+    def half_target_units(self, sku: Sku, f: float) -> int:
+        """Units the worker thinks fit in one half of a divided tote."""
+        if not self.p.dividers:
+            return 0
+        return self.judged_units(sku.n_max_half, sku.n_geometry_half, f)
+
+    def second_half_looks_ok(self, tote: ToteLoad, sku_index: int, units: int, f: float) -> bool:
+        """Weight check before filling the free half. The rule checks the exact limit,
+        judgement checks against f times the limit."""
+        weight = tote.weight_kg + units * self.skus[sku_index].weight_kg
+        return weight <= f * self.p.max_load_kg + _EPS
 
     @staticmethod
     def add(tote: ToteLoad, sku: Sku, sku_index: int, units: int) -> None:
@@ -311,41 +324,38 @@ class Station:
         removed = yield from self.send(worker, tote, rng)
         return sum(k for _, k in removed)
 
-    def start_mixed(self, worker: int, contents: list[list[int]], rng: np.random.Generator):
-        """Open a new remainder tote with the given contents."""
-        tote = ToteLoad("mixed")
+    def start_divided(self, worker: int, sku_index: int, units: int, rng: np.random.Generator):
+        """Fetch a tote, put in the divider and fill the first half."""
+        tote = ToteLoad("divided")
         yield from self.work(worker, "tote", self.p.t_tote, rng)
-        for sku_index, units in contents:
-            yield from self.work(worker, "place", self.p.t_unit * units, rng)
-            self.add(tote, self.skus[sku_index], sku_index, units)
-        self.open_mixed[worker] = tote
+        yield from self.work(worker, "place", self.p.t_unit * units, rng)
+        self.add(tote, self.skus[sku_index], sku_index, units)
+        self.open_divided[worker] = tote
 
-    def close_mixed(self, worker: int, rng: np.random.Generator):
-        """Send the open remainder tote. Units removed in rework start the next one."""
-        tote = self.open_mixed[worker]
-        self.open_mixed[worker] = None
-        if tote is None or tote.units == 0:
+    def close_divided(self, worker: int, rng: np.random.Generator):
+        """Send the open divided tote. Units removed in rework start the next one."""
+        tote = self.open_divided[worker]
+        self.open_divided[worker] = None
+        if tote is None:
             return
         removed = yield from self.send(worker, tote, rng)
-        if removed:
-            yield from self.start_mixed(worker, removed, rng)
+        for sku_index, units in removed:  # in practice at most one SKU comes out
+            yield from self.put_in_half(worker, sku_index, units, 1.0, rng)
 
-    def put_in_mixed(self, worker: int, sku_index: int, units: int, f: float,
-                     rng: np.random.Generator):
-        """Add a line's leftover units to the open remainder tote, or open a new one."""
-        tote = self.open_mixed[worker]
-        if tote is not None and self.looks_like_it_fits(tote, sku_index, units, f):
+    def put_in_half(self, worker: int, sku_index: int, units: int, f: float,
+                    rng: np.random.Generator):
+        """Put a leftover into the free half of the open divided tote, or start a new one."""
+        tote = self.open_divided[worker]
+        if tote is not None and self.second_half_looks_ok(tote, sku_index, units, f):
             yield from self.work(worker, "place", self.p.t_unit * units, rng)
             self.add(tote, self.skus[sku_index], sku_index, units)
+            yield from self.close_divided(worker, rng)  # both halves used
             return
-        yield from self.close_mixed(worker, rng)
-        tote = self.open_mixed[worker]  # may hold units removed in rework
-        if tote is not None and self.looks_like_it_fits(tote, sku_index, units, f):
-            yield from self.work(worker, "place", self.p.t_unit * units, rng)
-            self.add(tote, self.skus[sku_index], sku_index, units)
+        yield from self.close_divided(worker, rng)  # sent with one half empty
+        if self.open_divided[worker] is not None:   # rework units opened a new tote
+            yield from self.put_in_half(worker, sku_index, units, f, rng)
         else:
-            yield from self.close_mixed(worker, rng)
-            yield from self.start_mixed(worker, [[sku_index, units]], rng)
+            yield from self.start_divided(worker, sku_index, units, rng)
 
     def process_line(self, worker: int, line: OrderLine):
         sku = self.skus[line.sku]
@@ -354,14 +364,12 @@ class Station:
 
         yield from self.work(worker, "setup", self.p.t_line_setup, rng_time)
         remaining = line.quantity
-        empty = ToteLoad("mixed")
         while remaining > 0:
             f = self.fill_factor(rng_fill)
             yield from self.work(worker, "decide", self.decide_time(), rng_time)
             target = self.target_units(sku, f)
-            leftover = remaining < target
-            if leftover and self.p.mixing and self.looks_like_it_fits(empty, line.sku, remaining, f):
-                yield from self.put_in_mixed(worker, line.sku, remaining, f, rng_time)
+            if remaining <= self.half_target_units(sku, f):
+                yield from self.put_in_half(worker, line.sku, remaining, f, rng_time)
                 remaining = 0
             else:
                 units = min(remaining, target)
@@ -377,8 +385,8 @@ class Station:
             self.line_done[line.line_id] = self.env.now
             self.in_system -= 1
         last_rng = rng_for(self.seed, _STREAM_TIMES, 10**6 + worker)
-        while self.open_mixed[worker] is not None:
-            yield from self.close_mixed(worker, last_rng)
+        while self.open_divided[worker] is not None:
+            yield from self.close_divided(worker, last_rng)
         self.workers_left -= 1
 
     # ---------- arrivals and monitoring ----------
@@ -428,9 +436,10 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
         "units_in": units_in,
         "units_stored": units_stored,
         "totes": n_totes,
-        "totes_mixed": sum(t.kind == "mixed" for t in stored),
+        "totes_divided": sum(t.kind == "divided" for t in stored),
         "totes_per_1000_units": 1000 * n_totes / units_in if units_in else 0.0,
         "fill_weight_mean": float(np.mean([t.weight_kg / tote.max_load_kg for t in stored])) if stored else 0.0,
+        "fill_weight_max": max((t.weight_kg / tote.max_load_kg for t in stored), default=0.0),
         "fill_volume_mean": float(np.mean([t.volume_mm3 / tote.usable_volume_mm3 for t in stored])) if stored else 0.0,
         "overweight_rejections": station.overweight_rejections,
         "finish_min": finish,
