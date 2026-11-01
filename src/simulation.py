@@ -3,9 +3,11 @@
 What happens in the model:
 - Order lines (one SKU, Q units) arrive as a Poisson process during one shift.
 - They wait in a queue until a worker is free. Each worker fills totes for the line.
-- Every tote compartment holds one SKU. With dividers on, a small leftover of a line
-  goes into one half of a divided tote. The other half takes the next leftover that
-  fits, then the tote is sent (decision D10 in CLAUDE.md).
+- Every tote compartment holds one SKU. Dividers split a tote into two halves
+  (across the length or across the width) or into four quarters. A small leftover
+  of a line goes into a compartment. The partly filled tote waits at the desk for
+  the next leftover that fits. Only one such tote can wait at a time
+  (decisions D10 and D13 in CLAUDE.md).
 - A tote is pushed onto the conveyor. An overweight tote is rejected there and the
   worker reworks it: removes units, pushes it again. Removed units go into the next tote.
 - Accepted totes wait in a small buffer and the lifter takes them into storage.
@@ -30,6 +32,14 @@ import pandas as pd
 import simpy
 
 from src.packing import Item, Tote, units_per_tote
+
+# Divided-tote layouts and how many compartments each has.
+COMPARTMENTS = {"half_length": 2, "half_width": 2, "quarter": 4}
+LAYOUTS_ALLOWED = {
+    "none": (),
+    "halves": ("half_length", "half_width"),
+    "all": ("half_length", "half_width", "quarter"),
+}
 
 CATALOGUE_PATH = Path(__file__).resolve().parent.parent / "data" / "sku_catalogue.csv"
 _EPS = 1e-9
@@ -58,7 +68,7 @@ class Params:
     # Station
     n_workers: int = 1
     filling: str = "rule"  # "rule" or "judgement"
-    dividers: bool = True  # a divider splits the tote length into two halves
+    dividers: str = "all"  # "none", "halves" or "all" (halves and quarters)
     # Judgement fill factor F ~ triangular(low, mode, high), drawn per tote
     f_low: float = 0.65
     f_mode: float = 0.85
@@ -81,10 +91,12 @@ class Params:
     def tote(self) -> Tote:
         return Tote(self.tote_length_mm, self.tote_width_mm, self.tote_height_mm, self.max_load_kg)
 
-    @property
-    def half_tote(self) -> Tote:
-        """One compartment of a divided tote. The weight limit is still the whole tote's."""
-        return Tote(self.tote_length_mm / 2, self.tote_width_mm, self.tote_height_mm, self.max_load_kg)
+    def compartment_totes(self) -> dict[str, Tote]:
+        """One compartment of each layout. The weight limit is still the whole tote's."""
+        L, W, H, kg = self.tote_length_mm, self.tote_width_mm, self.tote_height_mm, self.max_load_kg
+        return {"half_length": Tote(L / 2, W, H, kg),   # divider across the length
+                "half_width": Tote(L, W / 2, H, kg),    # divider along the length
+                "quarter": Tote(L / 2, W / 2, H, kg)}   # both dividers
 
     @property
     def lifter_time(self) -> float:
@@ -98,8 +110,8 @@ class Sku:
     volume_mm3: float
     n_max: int        # packing rule result
     n_geometry: int   # most units that physically fit (grid bound)
-    n_max_half: int       # packing rule in one half of a divided tote (0 = does not fit)
-    n_geometry_half: int
+    compartment_n_max: dict[str, int]       # packing rule per layout (0 = does not fit)
+    compartment_n_geometry: dict[str, int]
     qty_min: int
     qty_max: int
     share: float
@@ -117,7 +129,8 @@ class OrderLine:
 class ToteLoad:
     """Contents of one tote: a list of [sku index, units]."""
 
-    kind: str  # "single" or "divided"
+    kind: str  # "single" or a layout from COMPARTMENTS
+    used: int = 0  # compartments in use (divided totes)
     contents: list[list[int]] = field(default_factory=list)
     weight_kg: float = 0.0
     volume_mm3: float = 0.0
@@ -140,11 +153,14 @@ def load_catalogue(params: Params, path: Path = CATALOGUE_PATH) -> list[Sku]:
     for row, share in zip(df.itertuples(), shares):
         item = Item(row.length_mm, row.width_mm, row.height_mm, row.unit_weight_kg)
         packing = units_per_tote(item, params.tote)
-        half = units_per_tote(item, params.half_tote)
+        compartments = {name: units_per_tote(item, tote)
+                        for name, tote in params.compartment_totes().items()}
         if not packing.fits:
             continue  # cannot go into the system at all
         skus.append(Sku(row.sku_id, row.unit_weight_kg, item.volume_mm3, packing.n_max,
-                        packing.n_geometry, half.n_max, half.n_geometry,
+                        packing.n_geometry,
+                        {name: c.n_max for name, c in compartments.items()},
+                        {name: c.n_geometry for name, c in compartments.items()},
                         row.typical_inbound_qty_min,
                         row.typical_inbound_qty_max, share))
     return skus
@@ -252,17 +268,38 @@ class Station:
         """Units for a fresh single-SKU tote."""
         return self.judged_units(sku.n_max, sku.n_geometry, f)
 
-    def half_target_units(self, sku: Sku, f: float) -> int:
-        """Units the worker thinks fit in one half of a divided tote."""
-        if not self.p.dividers:
-            return 0
-        return self.judged_units(sku.n_max_half, sku.n_geometry_half, f)
+    def compartment_target(self, sku: Sku, layout: str, f: float) -> int:
+        """Units the worker thinks fit in one compartment of a layout."""
+        return self.judged_units(sku.compartment_n_max[layout],
+                                 sku.compartment_n_geometry[layout], f)
 
-    def second_half_looks_ok(self, tote: ToteLoad, sku_index: int, units: int, f: float) -> bool:
-        """Weight check before filling the free half. The rule checks the exact limit,
-        judgement checks against f times the limit."""
-        weight = tote.weight_kg + units * self.skus[sku_index].weight_kg
-        return weight <= f * self.p.max_load_kg + _EPS
+    def best_new_layout(self, sku: Sku, units: int, f: float) -> str | None:
+        """Smallest compartment the leftover fits in: a quarter, then the bigger half.
+
+        None means it fits no compartment (or dividers are off).
+        """
+        allowed = LAYOUTS_ALLOWED[self.p.dividers]
+        if "quarter" in allowed and units <= self.compartment_target(sku, "quarter", f):
+            return "quarter"
+        halves = [layout for layout in ("half_length", "half_width")
+                  if layout in allowed and units <= self.compartment_target(sku, layout, f)]
+        if not halves:
+            return None
+        return max(halves, key=lambda layout: sku.compartment_n_max[layout])  # tie: half_length
+
+    def fits_open_tote(self, worker: int, sku_index: int, units: int, f: float) -> bool:
+        """Does the leftover go into a free compartment of the tote waiting at the desk?
+
+        The compartment must hold the units, and the whole tote's weight must look OK:
+        exact for the rule, f times the limit for judgement.
+        """
+        tote = self.open_divided[worker]
+        if tote is None:
+            return False
+        sku = self.skus[sku_index]
+        weight = tote.weight_kg + units * sku.weight_kg
+        return (units <= self.compartment_target(sku, tote.kind, f)
+                and weight <= f * self.p.max_load_kg + _EPS)
 
     @staticmethod
     def add(tote: ToteLoad, sku: Sku, sku_index: int, units: int) -> None:
@@ -324,38 +361,48 @@ class Station:
         removed = yield from self.send(worker, tote, rng)
         return sum(k for _, k in removed)
 
-    def start_divided(self, worker: int, sku_index: int, units: int, rng: np.random.Generator):
-        """Fetch a tote, put in the divider and fill the first half."""
-        tote = ToteLoad("divided")
+    def start_divided(self, worker: int, layout: str, sku_index: int, units: int,
+                      rng: np.random.Generator):
+        """Fetch a tote, put in the dividers and fill the first compartment."""
+        tote = ToteLoad(layout)
         yield from self.work(worker, "tote", self.p.t_tote, rng)
         yield from self.work(worker, "place", self.p.t_unit * units, rng)
         self.add(tote, self.skus[sku_index], sku_index, units)
+        tote.used = 1
         self.open_divided[worker] = tote
 
     def close_divided(self, worker: int, rng: np.random.Generator):
-        """Send the open divided tote. Units removed in rework start the next one."""
+        """Send the waiting divided tote. Units removed in rework are placed again."""
         tote = self.open_divided[worker]
         self.open_divided[worker] = None
         if tote is None:
             return
         removed = yield from self.send(worker, tote, rng)
         for sku_index, units in removed:  # in practice at most one SKU comes out
-            yield from self.put_in_half(worker, sku_index, units, 1.0, rng)
+            yield from self.place_leftover(worker, sku_index, units, 1.0, rng)
 
-    def put_in_half(self, worker: int, sku_index: int, units: int, f: float,
-                    rng: np.random.Generator):
-        """Put a leftover into the free half of the open divided tote, or start a new one."""
+    def place_leftover(self, worker: int, sku_index: int, units: int, f: float,
+                       rng: np.random.Generator):
+        """Put a leftover into the waiting tote if it fits, else into a new divided tote."""
         tote = self.open_divided[worker]
-        if tote is not None and self.second_half_looks_ok(tote, sku_index, units, f):
+        if self.fits_open_tote(worker, sku_index, units, f):
             yield from self.work(worker, "place", self.p.t_unit * units, rng)
             self.add(tote, self.skus[sku_index], sku_index, units)
-            yield from self.close_divided(worker, rng)  # both halves used
+            tote.used += 1
+            if tote.used == COMPARTMENTS[tote.kind]:
+                yield from self.close_divided(worker, rng)  # all compartments used
             return
-        yield from self.close_divided(worker, rng)  # sent with one half empty
+        layout = self.best_new_layout(self.skus[sku_index], units, f)
+        if layout is None:  # only after rework: too many units for any compartment
+            removed = yield from self.fill_single(worker, sku_index, units, rng)
+            if removed:
+                yield from self.place_leftover(worker, sku_index, removed, 1.0, rng)
+            return
+        yield from self.close_divided(worker, rng)  # leaves with empty compartments
         if self.open_divided[worker] is not None:   # rework units opened a new tote
-            yield from self.put_in_half(worker, sku_index, units, f, rng)
+            yield from self.place_leftover(worker, sku_index, units, f, rng)
         else:
-            yield from self.start_divided(worker, sku_index, units, rng)
+            yield from self.start_divided(worker, layout, sku_index, units, rng)
 
     def process_line(self, worker: int, line: OrderLine):
         sku = self.skus[line.sku]
@@ -368,8 +415,10 @@ class Station:
             f = self.fill_factor(rng_fill)
             yield from self.work(worker, "decide", self.decide_time(), rng_time)
             target = self.target_units(sku, f)
-            if remaining <= self.half_target_units(sku, f):
-                yield from self.put_in_half(worker, line.sku, remaining, f, rng_time)
+            leftover = remaining < target
+            if leftover and (self.fits_open_tote(worker, line.sku, remaining, f)
+                             or self.best_new_layout(sku, remaining, f) is not None):
+                yield from self.place_leftover(worker, line.sku, remaining, f, rng_time)
                 remaining = 0
             else:
                 units = min(remaining, target)
@@ -436,7 +485,11 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
         "units_in": units_in,
         "units_stored": units_stored,
         "totes": n_totes,
-        "totes_divided": sum(t.kind == "divided" for t in stored),
+        "totes_divided": sum(t.kind != "single" for t in stored),
+        "totes_half_length": sum(t.kind == "half_length" for t in stored),
+        "totes_half_width": sum(t.kind == "half_width" for t in stored),
+        "totes_quarter": sum(t.kind == "quarter" for t in stored),
+        "empty_compartments": sum(COMPARTMENTS[t.kind] - t.used for t in stored if t.kind != "single"),
         "totes_per_1000_units": 1000 * n_totes / units_in if units_in else 0.0,
         "fill_weight_mean": float(np.mean([t.weight_kg / tote.max_load_kg for t in stored])) if stored else 0.0,
         "fill_weight_max": max((t.weight_kg / tote.max_load_kg for t in stored), default=0.0),

@@ -15,24 +15,34 @@ from src.simulation import (
 FIXED = dict(time_cv=0.0, max_load_kg=15.0)
 
 
-def cube_sku(params: Params) -> Sku:
-    """100 mm cube, 1 kg. In a 560 x 360 x 200 mm, 15 kg tote:
-    weight bound 15, grid 5 x 3 x 2 = 30, so n_max = 15 (weight-bound).
-    One half of a divided tote (280 x 360 x 200): grid 2 x 3 x 2 = 12, so 12 per half."""
-    item = Item(100, 100, 100, 1.0)
+def make_sku(params: Params, sku_id: str, dims: tuple[float, float, float], kg: float) -> Sku:
+    """A test SKU with the packing rule applied to the tote and every compartment."""
+    item = Item(*dims, kg)
     packing = units_per_tote(item, params.tote)
-    half = units_per_tote(item, params.half_tote)
-    assert (packing.n_max, packing.n_geometry) == (15, 30)
-    assert (half.n_max, half.n_geometry) == (12, 12)
-    return Sku("CUBE", 1.0, item.volume_mm3, packing.n_max, packing.n_geometry,
-               half.n_max, half.n_geometry, 1, 100, 1.0)
+    compartments = {name: units_per_tote(item, tote)
+                    for name, tote in params.compartment_totes().items()}
+    return Sku(sku_id, kg, item.volume_mm3, packing.n_max, packing.n_geometry,
+               {name: c.n_max for name, c in compartments.items()},
+               {name: c.n_geometry for name, c in compartments.items()}, 1, 100, 1.0)
+
+
+def cube_sku(params: Params) -> Sku:
+    """100 mm cube, 1 kg, 15 kg tote of 560 x 360 x 200 mm.
+    Whole tote: weight bound 15, grid 5 x 3 x 2 = 30, so n_max = 15 (weight-bound).
+    Half across the length (280 x 360): 2 x 3 x 2 = 12.
+    Half along the length (560 x 180): 5 x 1 x 2 = 10.
+    Quarter (280 x 180): 2 x 1 x 2 = 4."""
+    sku = make_sku(params, "CUBE", (100, 100, 100), 1.0)
+    assert (sku.n_max, sku.n_geometry) == (15, 30)
+    assert sku.compartment_n_max == {"half_length": 12, "half_width": 10, "quarter": 4}
+    return sku
 
 
 def test_deterministic_rule_matches_hand_calculation():
     # One line of 40 cubes: totes 15 + 15 + 10.
     # Busy time = setup 1.5 + 3 x (decide 0.1 + tote 1.0) + 40 units x 5 s
     #           = 1.5 + 3.3 + 3.333 = 8.133 min
-    p = Params(filling="rule", dividers=False, **FIXED)
+    p = Params(filling="rule", dividers="none", **FIXED)
     res = run_replication(p, seed=1, skus=[cube_sku(p)], lines=[OrderLine(0, 0.0, 0, 40)])
     m = res.metrics
     assert m["totes"] == 3
@@ -46,7 +56,7 @@ def test_deterministic_overfill_is_reworked():
     # Judgement with F fixed at 1.1: the worker puts round(16.5) = 17 cubes = 17 kg
     # in a tote. The conveyor rejects it, 2 units come out (rework 1.5 + 2 x 5 s).
     # Line of 40: 17 -> 15, 17 -> 15, then 10. Three totes, two rejections.
-    p = Params(filling="judgement", dividers=False, f_low=1.1, f_mode=1.1, f_high=1.1, **FIXED)
+    p = Params(filling="judgement", dividers="none", f_low=1.1, f_mode=1.1, f_high=1.1, **FIXED)
     res = run_replication(p, seed=1, skus=[cube_sku(p)], lines=[OrderLine(0, 0.0, 0, 40)])
     m = res.metrics
     assert m["totes"] == 3
@@ -57,7 +67,7 @@ def test_deterministic_overfill_is_reworked():
     assert m["units_stored"] == 40
 
 
-def run_cubes(quantities: list[int], dividers: bool = True) -> dict:
+def run_cubes(quantities: list[int], dividers: str = "all") -> dict:
     """Rule, fixed times, one line of cubes every 20 minutes."""
     p = Params(filling="rule", dividers=dividers, **FIXED)
     lines = [OrderLine(i, 20.0 * i, 0, q) for i, q in enumerate(quantities)]
@@ -65,35 +75,66 @@ def run_cubes(quantities: list[int], dividers: bool = True) -> dict:
 
 
 def test_two_small_lines_share_a_divided_tote():
-    # 5 + 5 cubes: each fits in a half (12), together 10 kg <= 15 kg. One tote.
+    # 5 + 5 cubes: too many for a quarter (4), so the bigger half (12). Together 10 kg. One tote.
     m = run_cubes([5, 5])
-    assert (m["totes"], m["totes_divided"], m["units_stored"]) == (1, 1, 10)
+    assert (m["totes"], m["totes_half_length"], m["units_stored"]) == (1, 1, 10)
+    assert m["empty_compartments"] == 0
 
 
-def test_a_divided_tote_has_only_two_halves():
-    # 5 + 5 + 5: the first two share a tote, the third starts a new one.
+def test_a_halved_tote_has_only_two_halves():
+    # 5 + 5 + 5: the first two share a tote, the third starts a new one (one half left empty).
     m = run_cubes([5, 5, 5])
-    assert (m["totes"], m["totes_divided"]) == (2, 2)
+    assert (m["totes"], m["totes_divided"], m["empty_compartments"]) == (2, 2, 1)
 
 
-def test_second_half_must_respect_the_weight_limit():
+def test_four_small_lines_share_a_quarter_tote():
+    # 3 cubes fit in a quarter (4). Four lines of 3 = 12 kg <= 15 kg. One tote.
+    m = run_cubes([3, 3, 3, 3])
+    assert (m["totes"], m["totes_quarter"], m["empty_compartments"]) == (1, 1, 0)
+
+
+def test_leftover_that_does_not_fit_sends_the_waiting_tote():
+    # 3 cubes open a quarter tote. 5 do not fit a quarter, so the quarter tote leaves
+    # with 3 empty quarters and a new half tote starts. It leaves at the end, one half empty.
+    m = run_cubes([3, 5])
+    assert (m["totes"], m["totes_quarter"], m["totes_half_length"]) == (2, 1, 1)
+    assert m["empty_compartments"] == 3 + 1
+
+
+def test_second_compartment_must_respect_the_weight_limit():
     # 10 + 10 cubes: each fits in a half, but together 20 kg > 15 kg. Two totes.
     m = run_cubes([10, 10])
     assert (m["totes"], m["overweight_rejections"]) == (2, 0)
 
 
 def test_leftover_too_big_for_a_half_gets_its_own_tote():
-    # 13 cubes do not fit in a half (12), so they fill a single-SKU tote.
+    # 13 cubes do not fit in any compartment (best half 12), so they fill a single-SKU tote.
     m = run_cubes([13, 5])
     assert (m["totes"], m["totes_divided"]) == (2, 1)
 
 
 def test_without_dividers_each_leftover_gets_its_own_tote():
-    assert run_cubes([5, 5], dividers=False)["totes"] == 2
+    assert run_cubes([5, 5], dividers="none")["totes"] == 2
+
+
+def test_halves_only_cannot_use_quarters():
+    m = run_cubes([3, 3, 3, 3], dividers="halves")
+    assert (m["totes"], m["totes_quarter"]) == (2, 0)
+
+
+def test_long_item_uses_the_half_along_the_length():
+    # 500 x 80 x 80 mm, 1 kg. It is longer than 360 mm, so it fits neither a quarter
+    # (280 x 180) nor a half across the length (280 x 360). It fits the half along the
+    # length (560 x 180): 1 x 2 x 2 = 4. Whole tote: 1 x 4 x 2 = 8.
+    p = Params(filling="rule", **FIXED)
+    sku = make_sku(p, "LONG", (500, 80, 80), 1.0)
+    assert sku.compartment_n_max == {"half_length": 0, "half_width": 4, "quarter": 0}
+    m = run_replication(p, seed=1, skus=[sku], lines=[OrderLine(0, 0.0, 0, 3)]).metrics
+    assert (m["totes"], m["totes_half_width"]) == (1, 1)
 
 
 @pytest.mark.parametrize("filling", ["rule", "judgement"])
-@pytest.mark.parametrize("dividers", [False, True])
+@pytest.mark.parametrize("dividers", ["none", "halves", "all"])
 @pytest.mark.parametrize("n_workers", [1, 2])
 def test_units_in_equal_units_stored(filling, dividers, n_workers):
     p = Params(filling=filling, dividers=dividers, n_workers=n_workers, arrival_rate_per_h=6.0)
@@ -104,7 +145,7 @@ def test_units_in_equal_units_stored(filling, dividers, n_workers):
 
 
 def test_no_tote_over_the_limit_reaches_storage():
-    p = Params(filling="judgement", dividers=True, f_mode=1.05, f_low=0.9, f_high=1.3)
+    p = Params(filling="judgement", dividers="all", f_mode=1.05, f_low=0.9, f_high=1.3)
     skus = load_catalogue(p)
     m = run_replication(p, 3, skus).metrics
     assert m["overweight_rejections"] > 0
@@ -125,7 +166,7 @@ def expected_work_per_line(p: Params, skus: list[Sku]) -> float:
 def test_utilisation_matches_offered_load_at_low_load():
     # Utilisation should be close to (lines per minute) x (work per line).
     # One shift at 1 line/h has only ~8 lines, so many replications are needed.
-    p = Params(filling="rule", dividers=False, arrival_rate_per_h=1.0)
+    p = Params(filling="rule", dividers="none", arrival_rate_per_h=1.0)
     skus = load_catalogue(p)
     offered = p.arrival_rate_per_h / 60 * expected_work_per_line(p, skus)
     measured = np.mean([run_replication(p, s, skus).metrics["worker_utilisation"]
@@ -135,7 +176,7 @@ def test_utilisation_matches_offered_load_at_low_load():
 
 def test_littles_law():
     # Time-average number of lines in the system L = arrival rate x mean time in system.
-    p = Params(filling="judgement", dividers=True, arrival_rate_per_h=6.0, sample_dt=0.1)
+    p = Params(filling="judgement", dividers="all", arrival_rate_per_h=6.0, sample_dt=0.1)
     skus = load_catalogue(p)
     for seed in range(3):
         res = run_replication(p, seed, skus)
