@@ -1,6 +1,6 @@
 # Open questions for Albin
 
-Asked on 2026-10-26, not yet answered. Use only what Albin confirms. Anything else stays labelled as an assumption in `assumptions_and_sources.md`.
+Asked on 2026-10-26. **Answered on 2026-11-01**, see the answers table in `assumptions_and_sources.md`. Q1 was checked with a checklist doc. Use only what Albin confirms. Anything else stays labelled as an assumption in `assumptions_and_sources.md`.
 
 1. **Catalogue:** do the categories, package sizes and inbound quantities in `data/sku_catalogue.csv` look like what you handled? Anything missing or odd? (Lamps are set to 50-200 per line, matching the 100-lamp example.)
 2. **Totes:** do you remember the weight limit or roughly how tall the totes were? Any value is recorded as "Albin's recollection" and still treated as a parameter.

@@ -35,6 +35,43 @@ Status column: **open** = still to be confirmed or checked.
 - Spot-check against public manufacturer datasheets: **open**.
 - Sanity check of categories by Albin: **in progress** (checklist doc, 2026-11-01). Removals above confirmed.
 
-## Simulation
+## Albin's answers to the open questions (2026-11-01)
 
-Not started yet.
+| Q | Answer | How it is used |
+|---|---|---|
+| 2 Tote limit | Does not remember. Albin chose 15 kg as the base value. | Base max load 15 kg. **Assumption, not a recollection.** The 35 kg Cuby figure stays as the upper end of the sensitivity range. At 15 kg, 17 of 35 SKUs are weight-bound (7 at 35 kg). |
+| 3 Mixed totes | **Albin's recollection:** products could be mixed, depending on the product. | Remainder-tote design (brief decision D10). Full totes stay single-SKU. Packing efficiency of the mixed tote is an assumption and is varied. |
+| 4 Overweight totes | **Albin's recollection:** the conveyor did not accept an overweight tote. The worker had to redo the tote before pushing it onto the conveyor again. | Overweight check at induction. A rejected tote returns to the worker, who removes units (time `t_rework`) and resubmits. Removed units go into the next tote. |
+| 5 Handling time | **Albin's recollection:** about 3-5 minutes per tote, depending a lot on how complex the delivery is. | Mean total time per tote calibrated to about 4 min. The split into fetch, decide and per-unit time is an assumption. |
+| 5b Stations and staff | **Albin's recollection:** about 4 stations, one worker in each. | The model simulates one station with one worker. Arrival rate is per station. An extra worker means a second station. |
+| - Lifter | **Albin's recollection:** never a bottleneck, except during rare technical faults. | Lifter modelled with a fixed service time from the 400 cycles/h figure. Faults are not modelled. |
+| - Rework | **Albin's recollection:** an overweight tote had to be redone before the conveyor accepted it. | Rework time per rejected tote is timed and shown separately in the worker breakdown. Its value is an assumption and is varied. |
+| 6 Judgement bias | **Albin's recollection:** workers underfilled, because an overfilled tote was not accepted by the conveyor. | Judgement fill factor F has its mode below 1. The sweep covers 0.6-1.05. |
+
+## Simulation (`src/simulation.py`, class `Params`)
+
+All handling times are means. Each draw is gamma-distributed with CV 0.3 (assumption). Times were chosen so that one tote takes about 4 min on average, in line with Albin's 3-5 min. At a 15 kg limit an average tote holds about 24 units and a line needs about 2.4 totes (rule, no mixing).
+
+| Parameter | Value | Why | Source | Varied? |
+|---|---|---|---|---|
+| Base max load | 15 kg | Albin's chosen site value (D9) | Assumption | Yes: 15 / 25 / 35 kg |
+| Shift | 480 min, starts empty | One shift per replication, so no warm-up. Lines that arrive before the end are finished in overtime | Assumption | No |
+| Arrival rate, normal | 4 lines/h per station | Gives worker utilisation of about 50-60 % | Assumption (calibrated) | Yes |
+| Arrival rate, peak | 6 lines/h (1.5 × normal) | Brief: 1.5-2 × normal | Assumption | Yes |
+| Stations | 1 modelled, 1 worker | Albin's recollection: about 4 stations, one worker each (D11) | Albin's recollection | S5: 2 workers |
+| Line setup | 1.5 min per line | Read the delivery note, unpack, scan | Assumption | No |
+| Tote handling | 1.0 min per tote | Fetch an empty tote, label, push onto the conveyor | Assumption | No |
+| Decision, rule | 0.1 min per tote | Read the number from a screen | Assumption | No |
+| Decision, judgement | 0.5 min per tote | Look, estimate, maybe lift to feel the weight | Assumption | No |
+| Place one unit | 5 s | | Assumption | No |
+| Rework | 1.5 min + 5 s per removed unit | Tote comes back from the conveyor check, units come out, push again (D12) | Assumption, mechanism from Albin's recollection | Not yet |
+| Judgement fill factor F | triangular(0.65, 0.85, 1.10) per tote | Albin's recollection: workers underfilled. The upper tail lets about 9 % of totes be filled above capacity, so overweight happens sometimes | Assumption | **Yes, headline sweep of the mode** |
+| How F works | Worker puts round(F × n_max) units in a tote, at most what physically fits | A worker can see volume but cannot see weight. So only weight-bound SKUs can be overweight | Modelling choice | No |
+| Overweight rework | Units removed until the tote is under the limit | Simplification: after rework the tote is exactly at the weight bound | Modelling choice | No |
+| Mixing (remainder tote) | On. Leftover of a line goes into a shared open tote if it fits | D10 | Modelling choice | Yes: on / off |
+| Mixed-tote volume efficiency | 80 % of tote volume | Mixed shapes leave gaps | Assumption | Planned |
+| Judgement in mixed totes | Adds the leftover if it fits within F × limits | Same F as for single-SKU totes | Modelling choice | With F |
+| Lifter | 9 s per tote (400 cycles/h), buffer 10 totes | 2016 press figure, indicative only. Albin's recollection: never a bottleneck | Public figure + Albin's recollection | No |
+| Lead time | Arrival until the worker has put all units of the line in totes | With mixing, the last units may wait in an open tote, so "until inducted" is not defined | Modelling choice | No |
+| Random numbers | Separate streams for arrivals, fill factors and handling times. Fill and time streams are per order line | Common random numbers: the same line gets the same draws in every scenario | Method | No |
+
