@@ -78,6 +78,15 @@ All handling times are means. Each draw is gamma-distributed with CV 0.3 (assump
 | Random numbers | Separate streams for arrivals, fill factors and handling times. Fill and time streams are per order line | Common random numbers: the same line gets the same draws in every scenario | Method | No |
 
 
+## Scenarios and statistics (`src/scenarios.py`, step 3)
+
+| Item | Value | Why | Source |
+|---|---|---|---|
+| Replications | 50 per scenario, seeds 1-50, the same list for every scenario | Brief asks for at least 30. 50 keeps the paired CIs of the main metric within about ±0.5 totes per 1000 units | Method |
+| Warm-up | None | Each replication is one shift that starts empty, as a real shift does | Method |
+| Confidence intervals | t-based 95 % CI of the mean. Differences: paired over matching seeds | Common random numbers make paired CIs much narrower | Method |
+| Peak rate | 6 lines/h = 1.5 × normal | Brief: 1.5-2 × normal | Assumption |
+
 ## Confirmed by Albin (2026-11-01)
 
 Albin confirmed these four modelling choices as matching what he saw ("All 4 are correct"):

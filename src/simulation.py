@@ -477,6 +477,25 @@ class Station:
         self.env.run()
 
 
+def totes_by_binding(station: Station, lines: list[OrderLine]) -> dict[str, float]:
+    """Totes per 1000 units, split by whether weight or volume limits the product.
+
+    A divided tote is shared between its products in proportion to their units.
+    """
+    weight_bound = [s.n_max < s.n_geometry for s in station.skus]
+    totes = {True: 0.0, False: 0.0}
+    units = {True: 0, False: 0}
+    for t in station.stored:
+        for sku_index, n in t.contents:
+            totes[weight_bound[sku_index]] += n / t.units
+    for line in lines:
+        units[weight_bound[line.sku]] += line.quantity
+    return {
+        "totes_per_1000_units_weight_bound": 1000 * totes[True] / units[True] if units[True] else 0.0,
+        "totes_per_1000_units_volume_bound": 1000 * totes[False] / units[False] if units[False] else 0.0,
+    }
+
+
 def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
     """Metrics of one replication."""
     p = station.p
@@ -502,6 +521,7 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
         "totes_quarter": sum(t.kind == "quarter" for t in stored),
         "empty_compartments": sum(COMPARTMENTS[t.kind] - t.used for t in stored if t.kind != "single"),
         "totes_per_1000_units": 1000 * n_totes / units_in if units_in else 0.0,
+        **totes_by_binding(station, lines),
         "fill_weight_mean": float(np.mean([t.weight_kg / tote.max_load_kg for t in stored])) if stored else 0.0,
         "fill_weight_max": max((t.weight_kg / tote.max_load_kg for t in stored), default=0.0),
         "fill_volume_mean": float(np.mean([t.volume_mm3 / tote.usable_volume_mm3 for t in stored])) if stored else 0.0,
