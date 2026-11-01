@@ -67,9 +67,9 @@ def test_deterministic_overfill_is_reworked():
     assert m["units_stored"] == 40
 
 
-def run_cubes(quantities: list[int], dividers: str = "all") -> dict:
+def run_cubes(quantities: list[int], dividers: str = "all", waiting_totes: int = 1) -> dict:
     """Rule, fixed times, one line of cubes every 20 minutes."""
-    p = Params(filling="rule", dividers=dividers, **FIXED)
+    p = Params(filling="rule", dividers=dividers, waiting_totes=waiting_totes, **FIXED)
     lines = [OrderLine(i, 20.0 * i, 0, q) for i, q in enumerate(quantities)]
     return run_replication(p, seed=1, skus=[cube_sku(p)], lines=lines).metrics
 
@@ -113,6 +113,29 @@ def test_leftover_too_big_for_a_half_gets_its_own_tote():
     assert (m["totes"], m["totes_divided"]) == (2, 1)
 
 
+def test_two_waiting_totes_let_small_leftovers_pair_up():
+    # Lines 3, 5, 3, 5 cubes.
+    # One waiting tote: quarter(3) leaves with 3 empty quarters when 5 arrive. Half(5) takes
+    # the next 3 in its free half and leaves full. The last 5 start a new half tote. 3 totes.
+    one = run_cubes([3, 5, 3, 5], waiting_totes=1)
+    assert (one["totes"], one["empty_compartments"]) == (3, 3 + 1)
+    # Two waiting totes: the quarter tote and the half tote wait side by side. The second 3
+    # goes into the quarter tote (smallest compartment that fits), the second 5 fills the
+    # half tote. 2 totes.
+    two = run_cubes([3, 5, 3, 5], waiting_totes=2)
+    assert (two["totes"], two["empty_compartments"]) == (2, 2)
+
+
+def test_full_desk_sends_the_tote_with_fewest_empty_compartments():
+    # Two waiting totes. 3 -> quarter tote A. 5 -> half tote B. 3 -> A (2 of 4 used).
+    # 11 needs a half, B's free half would make 16 kg > 15, so a new tote is needed and the
+    # desk is full. B has 1 empty compartment, A has 2, so B leaves. 11 start half tote C.
+    # At the end A and C leave. Empty compartments: B 1 + A 2 + C 1 = 4.
+    m = run_cubes([3, 5, 3, 11], waiting_totes=2)
+    assert (m["totes"], m["totes_quarter"], m["totes_half_length"]) == (3, 1, 2)
+    assert m["empty_compartments"] == 4
+
+
 def test_without_dividers_each_leftover_gets_its_own_tote():
     assert run_cubes([5, 5], dividers="none")["totes"] == 2
 
@@ -136,12 +159,15 @@ def test_long_item_uses_the_half_along_the_length():
 @pytest.mark.parametrize("filling", ["rule", "judgement"])
 @pytest.mark.parametrize("dividers", ["none", "halves", "all"])
 @pytest.mark.parametrize("n_workers", [1, 2])
-def test_units_in_equal_units_stored(filling, dividers, n_workers):
-    p = Params(filling=filling, dividers=dividers, n_workers=n_workers, arrival_rate_per_h=6.0)
+@pytest.mark.parametrize("waiting_totes", [1, 2])
+def test_units_in_equal_units_stored(filling, dividers, n_workers, waiting_totes):
+    p = Params(filling=filling, dividers=dividers, n_workers=n_workers,
+               waiting_totes=waiting_totes, arrival_rate_per_h=6.0)
     skus = load_catalogue(p)
     for seed in range(5):
         m = run_replication(p, seed, skus).metrics
         assert m["units_in"] == m["units_stored"]
+        assert m["share_idle"] >= -1e-9  # busy time fits inside the measured window
 
 
 def test_no_tote_over_the_limit_reaches_storage():

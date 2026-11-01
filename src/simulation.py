@@ -5,9 +5,9 @@ What happens in the model:
 - They wait in a queue until a worker is free. Each worker fills totes for the line.
 - Every tote compartment holds one SKU. Dividers split a tote into two halves
   (across the length or across the width) or into four quarters. A small leftover
-  of a line goes into a compartment. The partly filled tote waits at the desk for
-  the next leftover that fits. Only one such tote can wait at a time
-  (decisions D10 and D13 in CLAUDE.md).
+  of a line goes into a compartment. Partly filled divided totes wait at the desk
+  for the next leftover that fits. One or two may wait (decisions D10, D13, D14
+  in CLAUDE.md).
 - A tote is pushed onto the conveyor. An overweight tote is rejected there and the
   worker reworks it: removes units, pushes it again. Removed units go into the next tote.
 - Accepted totes wait in a small buffer and the lifter takes them into storage.
@@ -69,6 +69,7 @@ class Params:
     n_workers: int = 1
     filling: str = "rule"  # "rule" or "judgement"
     dividers: str = "all"  # "none", "halves" or "all" (halves and quarters)
+    waiting_totes: int = 1  # partly filled divided totes that may wait at the desk
     # Judgement fill factor F ~ triangular(low, mode, high), drawn per tote
     f_low: float = 0.65
     f_mode: float = 0.85
@@ -218,7 +219,8 @@ class Station:
         self.line_queue = simpy.Store(self.env)
         self.buffer = simpy.Store(self.env, capacity=params.buffer_capacity)
 
-        self.open_divided: dict[int, ToteLoad | None] = {w: None for w in range(params.n_workers)}
+        self.waiting: dict[int, list[ToteLoad]] = {w: [] for w in range(params.n_workers)}
+        self.worker_end: dict[int, float] = {}
         self.busy = {w: dict.fromkeys(ACTIVITIES, 0.0) for w in range(params.n_workers)}
         self.workers_left = params.n_workers
         self.lifter_working = False
@@ -287,19 +289,25 @@ class Station:
             return None
         return max(halves, key=lambda layout: sku.compartment_n_max[layout])  # tie: half_length
 
-    def fits_open_tote(self, worker: int, sku_index: int, units: int, f: float) -> bool:
-        """Does the leftover go into a free compartment of the tote waiting at the desk?
+    def fits(self, tote: ToteLoad, sku_index: int, units: int, f: float) -> bool:
+        """Does the leftover go into a free compartment of a waiting tote?
 
         The compartment must hold the units, and the whole tote's weight must look OK:
         exact for the rule, f times the limit for judgement.
         """
-        tote = self.open_divided[worker]
-        if tote is None:
-            return False
         sku = self.skus[sku_index]
         weight = tote.weight_kg + units * sku.weight_kg
         return (units <= self.compartment_target(sku, tote.kind, f)
                 and weight <= f * self.p.max_load_kg + _EPS)
+
+    def waiting_tote_for(self, worker: int, sku_index: int, units: int, f: float) -> ToteLoad | None:
+        """The waiting tote the leftover goes into: the one with the smallest
+        compartment that still fits, so bigger compartments stay free."""
+        sku = self.skus[sku_index]
+        candidates = [t for t in self.waiting[worker] if self.fits(t, sku_index, units, f)]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda t: sku.compartment_n_max[t.kind])
 
     @staticmethod
     def add(tote: ToteLoad, sku: Sku, sku_index: int, units: int) -> None:
@@ -326,6 +334,7 @@ class Station:
                 tote.contents[-1][1] -= k
                 if tote.contents[-1][1] == 0:
                     tote.contents.pop()
+                    tote.used = max(0, tote.used - 1)  # that compartment is empty again
                 tote.weight_kg -= k * sku.weight_kg
                 tote.volume_mm3 -= k * sku.volume_mm3
                 removed.append([sku_index, k])
@@ -363,34 +372,31 @@ class Station:
 
     def start_divided(self, worker: int, layout: str, sku_index: int, units: int,
                       rng: np.random.Generator):
-        """Fetch a tote, put in the dividers and fill the first compartment."""
+        """Fetch a tote, put in the dividers, fill the first compartment, let it wait."""
         tote = ToteLoad(layout)
         yield from self.work(worker, "tote", self.p.t_tote, rng)
         yield from self.work(worker, "place", self.p.t_unit * units, rng)
         self.add(tote, self.skus[sku_index], sku_index, units)
         tote.used = 1
-        self.open_divided[worker] = tote
+        self.waiting[worker].append(tote)
 
-    def close_divided(self, worker: int, rng: np.random.Generator):
-        """Send the waiting divided tote. Units removed in rework are placed again."""
-        tote = self.open_divided[worker]
-        self.open_divided[worker] = None
-        if tote is None:
-            return
+    def close_divided(self, worker: int, tote: ToteLoad, rng: np.random.Generator):
+        """Send a waiting divided tote. Units removed in rework are placed again."""
+        self.waiting[worker].remove(tote)
         removed = yield from self.send(worker, tote, rng)
         for sku_index, units in removed:  # in practice at most one SKU comes out
             yield from self.place_leftover(worker, sku_index, units, 1.0, rng)
 
     def place_leftover(self, worker: int, sku_index: int, units: int, f: float,
                        rng: np.random.Generator):
-        """Put a leftover into the waiting tote if it fits, else into a new divided tote."""
-        tote = self.open_divided[worker]
-        if self.fits_open_tote(worker, sku_index, units, f):
+        """Put a leftover into a waiting tote if it fits, else into a new divided tote."""
+        tote = self.waiting_tote_for(worker, sku_index, units, f)
+        if tote is not None:
             yield from self.work(worker, "place", self.p.t_unit * units, rng)
             self.add(tote, self.skus[sku_index], sku_index, units)
             tote.used += 1
             if tote.used == COMPARTMENTS[tote.kind]:
-                yield from self.close_divided(worker, rng)  # all compartments used
+                yield from self.close_divided(worker, tote, rng)  # all compartments used
             return
         layout = self.best_new_layout(self.skus[sku_index], units, f)
         if layout is None:  # only after rework: too many units for any compartment
@@ -398,11 +404,14 @@ class Station:
             if removed:
                 yield from self.place_leftover(worker, sku_index, removed, 1.0, rng)
             return
-        yield from self.close_divided(worker, rng)  # leaves with empty compartments
-        if self.open_divided[worker] is not None:   # rework units opened a new tote
+        if len(self.waiting[worker]) >= self.p.waiting_totes:
+            # The desk is full: send the waiting tote with the fewest empty compartments.
+            fullest = min(self.waiting[worker], key=lambda t: COMPARTMENTS[t.kind] - t.used)
+            yield from self.close_divided(worker, fullest, rng)
+            # Rework may have placed units again, so look at the desk once more.
             yield from self.place_leftover(worker, sku_index, units, f, rng)
-        else:
-            yield from self.start_divided(worker, layout, sku_index, units, rng)
+            return
+        yield from self.start_divided(worker, layout, sku_index, units, rng)
 
     def process_line(self, worker: int, line: OrderLine):
         sku = self.skus[line.sku]
@@ -416,7 +425,7 @@ class Station:
             yield from self.work(worker, "decide", self.decide_time(), rng_time)
             target = self.target_units(sku, f)
             leftover = remaining < target
-            if leftover and (self.fits_open_tote(worker, line.sku, remaining, f)
+            if leftover and (self.waiting_tote_for(worker, line.sku, remaining, f) is not None
                              or self.best_new_layout(sku, remaining, f) is not None):
                 yield from self.place_leftover(worker, line.sku, remaining, f, rng_time)
                 remaining = 0
@@ -434,8 +443,9 @@ class Station:
             self.line_done[line.line_id] = self.env.now
             self.in_system -= 1
         last_rng = rng_for(self.seed, _STREAM_TIMES, 10**6 + worker)
-        while self.open_divided[worker] is not None:
-            yield from self.close_divided(worker, last_rng)
+        while self.waiting[worker]:
+            yield from self.close_divided(worker, self.waiting[worker][0], last_rng)
+        self.worker_end[worker] = self.env.now
         self.workers_left -= 1
 
     # ---------- arrivals and monitoring ----------
@@ -472,8 +482,9 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
     p = station.p
     tote = p.tote
     stored = station.stored
-    finish = max(station.line_done.values(), default=0.0)
-    horizon = max(p.shift_min, finish)
+    finish = max(station.line_done.values(), default=0.0)       # last line done
+    work_end = max(station.worker_end.values(), default=0.0)    # last waiting tote sent
+    horizon = max(p.shift_min, work_end)
 
     units_in = sum(line.quantity for line in lines)
     units_stored = sum(t.units for t in stored)
@@ -496,7 +507,8 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
         "fill_volume_mean": float(np.mean([t.volume_mm3 / tote.usable_volume_mm3 for t in stored])) if stored else 0.0,
         "overweight_rejections": station.overweight_rejections,
         "finish_min": finish,
-        "overtime_min": max(0.0, finish - p.shift_min),
+        "work_end_min": work_end,
+        "overtime_min": max(0.0, work_end - p.shift_min),
         "lead_mean_min": float(lead.mean()) if len(lead) else 0.0,
         "lead_p95_min": float(np.percentile(lead, 95)) if len(lead) else 0.0,
         "units_per_h": 60 * units_stored / horizon,
