@@ -74,6 +74,11 @@ class Params:
     f_low: float = 0.65
     f_mode: float = 0.85
     f_high: float = 1.10
+    # Optional separate F for volume-bound products (None = same as above). Lets the
+    # sensitivity analysis ask: what if workers fill bulky goods well by eye?
+    f_low_volume: float | None = None
+    f_mode_volume: float | None = None
+    f_high_volume: float | None = None
     # Handling times (mean, minutes)
     t_line_setup: float = 1.5   # read the delivery, unpack, scan
     t_tote: float = 1.0         # fetch an empty tote, label it, push it onto the conveyor
@@ -247,11 +252,15 @@ class Station:
         self.busy[worker][activity] += d
         yield self.env.timeout(d)
 
-    def fill_factor(self, rng: np.random.Generator) -> float:
+    def fill_factor(self, rng: np.random.Generator, sku: Sku) -> float:
         """F for one tote. The rule always fills to capacity (F = 1)."""
         u = rng.random()  # drawn in both modes, so the streams stay aligned
         if self.p.filling == "rule":
             return 1.0
+        volume_bound = sku.n_max >= sku.n_geometry
+        if volume_bound and self.p.f_mode_volume is not None:
+            return triangular_from_uniform(u, self.p.f_low_volume, self.p.f_mode_volume,
+                                           self.p.f_high_volume)
         return triangular_from_uniform(u, self.p.f_low, self.p.f_mode, self.p.f_high)
 
     @staticmethod
@@ -421,7 +430,7 @@ class Station:
         yield from self.work(worker, "setup", self.p.t_line_setup, rng_time)
         remaining = line.quantity
         while remaining > 0:
-            f = self.fill_factor(rng_fill)
+            f = self.fill_factor(rng_fill, sku)
             yield from self.work(worker, "decide", self.decide_time(), rng_time)
             target = self.target_units(sku, f)
             leftover = remaining < target
@@ -542,7 +551,8 @@ def summarise(station: Station, lines: list[OrderLine]) -> ReplicationResult:
         m[f"{activity}_min"] = minutes
         m[f"share_{activity}"] = minutes / capacity
         busy_total += minutes
-    m["worker_utilisation"] = (busy_total - m["blocked_min"]) / capacity
+    m["busy_min"] = busy_total - m["blocked_min"]  # summed over workers
+    m["worker_utilisation"] = m["busy_min"] / capacity
     m["share_idle"] = 1.0 - busy_total / capacity
 
     ts = pd.DataFrame(station.samples, columns=["t_min", "lines_waiting", "lines_in_system", "buffer"])

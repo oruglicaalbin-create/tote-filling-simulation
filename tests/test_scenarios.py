@@ -49,3 +49,12 @@ def test_split_by_binding_adds_up_to_the_total():
     combined = (m["totes_per_1000_units_weight_bound"] * units_w
                 + m["totes_per_1000_units_volume_bound"] * units_v) / (units_w + units_v)
     assert combined == pytest.approx(m["totes_per_1000_units"])
+
+
+def test_fill_factor_sweep_keeps_the_base_spread():
+    from src.sensitivity import mean_fill, with_fill_mode
+    p = with_fill_mode(Params(), 0.85)
+    assert (p.f_low, p.f_mode, p.f_high) == pytest.approx((0.65, 0.85, 1.10))
+    assert mean_fill(0.85) == pytest.approx((0.65 + 0.85 + 1.10) / 3)
+    q = with_fill_mode(Params(), 0.70, volume_perfect=True)
+    assert (q.f_low_volume, q.f_mode_volume, q.f_high_volume) == (1.0, 1.0, 1.0)

@@ -170,6 +170,19 @@ def test_units_in_equal_units_stored(filling, dividers, n_workers, waiting_totes
         assert m["share_idle"] >= -1e-9  # busy time fits inside the measured window
 
 
+def test_separate_fill_factor_for_volume_bound_products():
+    # Cube: weight-bound (15 by weight, 30 by space). Lamp box 100 x 100 x 120 mm, 0.15 kg:
+    # volume-bound (30 by space, 100 by weight). With F = 0.5 for weight-bound and F = 1 for
+    # volume-bound, 60 cubes need 60 / round(7.5) = 60 / 8 -> 8 totes, 60 lamps need 2 totes.
+    p = Params(filling="judgement", dividers="none", f_low=0.5, f_mode=0.5, f_high=0.5,
+               f_low_volume=1.0, f_mode_volume=1.0, f_high_volume=1.0, **FIXED)
+    skus = [cube_sku(p), make_sku(p, "LAMP", (100, 100, 120), 0.15)]
+    assert (skus[1].n_max, skus[1].n_geometry) == (30, 30)
+    lines = [OrderLine(0, 0.0, 0, 60), OrderLine(1, 30.0, 1, 60)]
+    m = run_replication(p, seed=1, skus=skus, lines=lines).metrics
+    assert m["totes"] == 8 + 2
+
+
 def test_no_tote_over_the_limit_reaches_storage():
     p = Params(filling="judgement", dividers="all", f_mode=1.05, f_low=0.9, f_high=1.3)
     skus = load_catalogue(p)

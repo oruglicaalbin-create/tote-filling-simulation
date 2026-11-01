@@ -87,6 +87,22 @@ All handling times are means. Each draw is gamma-distributed with CV 0.3 (assump
 | Confidence intervals | t-based 95 % CI of the mean. Differences: paired over matching seeds | Common random numbers make paired CIs much narrower | Method |
 | Peak rate | 6 lines/h = 1.5 × normal | Brief: 1.5-2 × normal | Assumption |
 
+## Sensitivity analysis (`src/sensitivity.py`, step 4)
+
+Each point runs the rule and judgement on seeds 1-50 and reports judgement minus rule with a paired 95 % CI. One assumption is varied at a time. Results: `results/sensitivity_fill_factor.csv` and `results/sensitivity_one_at_a_time.csv`.
+
+| Varied | Values | Why these values |
+|---|---|---|
+| Judgement fill factor F (headline) | Mode 0.60-1.05 in steps of 0.05, spread kept at mode − 0.20 / + 0.25 (mean fill 62-107 %) | Brief: mode about 0.6-1.05 |
+| Volume-bound goods by judgement | Same F as heavy goods (base), or filled perfectly (F = 1) | Conservative case: workers may see when a box is full by volume |
+| Max load | 15 / 25 / 35 kg | Albin's base value and the public Cuby maximum |
+| Tote inner height | 150 / 200 / 300 mm | Assumption: a lower and a higher tote around the 200 mm base |
+| Arrival rate | 3-7 lines/h | Normal 4, peak 6, and beyond |
+| Judgement decision time | 0.1 / 0.25 / 0.5 / 1.0 min | The time results rest on it. 0.1 = as fast as reading a screen |
+| Dividers and waiting totes | none, halves, all × 1 or 2 waiting totes | D13, D14 |
+
+Not varied: rework time (rejections are rare at the base case, so rework is under 0.1 % of worker time), handling times other than the decision time, the 1.5 × peak factor.
+
 ## Confirmed by Albin (2026-11-01)
 
 Albin confirmed these four modelling choices as matching what he saw ("All 4 are correct"):
