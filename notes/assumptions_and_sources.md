@@ -77,3 +77,12 @@ All handling times are means. Each draw is gamma-distributed with CV 0.3 (assump
 | Lead time | Arrival until the worker has put all units of the line in totes | With dividers, the last units may wait in an open half-filled tote, so "until inducted" is not defined | Modelling choice | No |
 | Random numbers | Separate streams for arrivals, fill factors and handling times. Fill and time streams are per order line | Common random numbers: the same line gets the same draws in every scenario | Method | No |
 
+
+## Confirmed by Albin (2026-11-01)
+
+Albin confirmed these four modelling choices as matching what he saw ("All 4 are correct"):
+
+1. A worker can overfill by weight without noticing, but never by volume. Only weight-bound products can be rejected as overweight.
+2. About one overweight rejection every three shifts per station (judgement F ~ triangular(0.65, 0.85, 1.10)) is plausible.
+3. Rework removes just enough units to get under the limit.
+4. Dividers are used whenever a leftover fits a compartment, in both scenarios.
