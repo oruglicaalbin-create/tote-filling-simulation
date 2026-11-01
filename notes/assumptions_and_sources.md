@@ -101,7 +101,7 @@ Each point runs the rule and judgement on seeds 1-50 and reports judgement minus
 | Judgement decision time | 0.1 / 0.25 / 0.5 / 1.0 min | The time results rest on it. 0.1 = as fast as reading a screen |
 | Dividers and waiting totes | none, halves, all × 1 or 2 waiting totes | D13, D14 |
 
-Not varied: rework time (rejections are rare at the base case, so rework is under 0.1 % of worker time), handling times other than the decision time, the 1.5 × peak factor.
+Not varied: rework time (rejections are rare at the base case, so rework takes about 0.1 % of worker time), handling times other than the decision time, the 1.5 × peak factor.
 
 ## Confirmed by Albin (2026-11-01)
 
