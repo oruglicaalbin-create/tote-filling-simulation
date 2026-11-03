@@ -33,7 +33,7 @@ Kaikki aineisto on keksittyä mutta uskottavaa. Mitään yrityksen todellista da
 1. Tilausrivit saapuvat satunnaisesti (Poisson-prosessi).
 2. Työntekijä ottaa rivin, hakee laatikon ja päättää kappalemäärän.
    - **Säännöllä** hän lukee luvun näytöltä.
-   - **Silmämääräisesti** hän täyttää laatikosta satunnaisen osuuden F todellisesta kapasiteetista. F arvotaan jokaiselle laatikolle kolmiojakaumasta (0,65, 0,85, 1,10), joten laatikko täyttyy keskimäärin 87-prosenttisesti. Työntekijä näkee tilan mutta ei painoa. Siksi vain painavat tuotteet voivat ylittää painorajan.
+   - **Silmämääräisesti** hän tähtää satunnaiseen osuuteen F säännön kapasiteetista. F arvotaan jokaiselle laatikolle kolmiojakaumasta (0,65, 0,85, 1,10), joten tavoite on keskimäärin 87 %. Laatikkoon ei mahdu enempää kuin fyysisesti mahtuu, joten yli 100 %:n tavoite vaikuttaa vain painaviin tuotteisiin. Työntekijä näkee tilan mutta ei painoa. Siksi vain painavat tuotteet voivat ylittää painorajan.
 3. Liian painavan laatikon kuljetin hylkää. Työntekijä poistaa kappaleita ja lähettää laatikon uudestaan. Poistetut kappaleet menevät seuraavaan laatikkoon.
 4. Laatikko menee hissin kautta hyllyyn ja vie yhden varastopaikan.
 
@@ -63,12 +63,12 @@ Sääntö käyttää 12 % vähemmän laatikoita. Se on 5,2 varastopaikkaa vähem
 
 ![Herkkyys täyttöasteelle](../results/fig5_sensitivity_fill_factor.png)
 
-| Keskimääräinen täyttö | 77 % | 82 % | 87 % (perus) | 92 % | 97 % | 102 % |
+| Tavoiteltu täyttö, % säännön kapasiteetista | 77 % | 82 % | 87 % (perus) | 92 % | 97 % | 102 % |
 |---|---|---|---|---|---|---|
 | Ylimääräiset laatikot / 1000 kpl | 10,4 | 7,4 | 5,2 | 3,0 | 1,6 | 0,8 |
 | Hylkäyksiä / vuoro | 0 | 0,1 | 0,3 | 1,0 | 1,7 | 3,4 |
 
-- Jos työntekijät täyttävät keskimäärin alle 92 % laatikon kapasiteetista, sääntö säästää yli 3 varastopaikkaa tuhatta kappaletta kohti. Alle 77 %:n täytöllä säästö on yli 10.
+- Jos työntekijät täyttävät keskimäärin alle 92 % säännön kapasiteetista, sääntö säästää yli 3 varastopaikkaa tuhatta kappaletta kohti. Alle 77 %:n täytöllä säästö on yli 10.
 - Silmämääräinen täyttö häviää kummassakin suunnassa. Varovainen täyttö tuhlaa tilaa, ja rohkea täyttö tuottaa hylkäyksiä.
 - Noin kaksi kolmasosaa säästöstä tulee kookkaista, tilan rajoittamista tuotteista. Jos työntekijät täyttäisivät ne täydellisesti, säästö perustapauksessa olisi 1,7 eikä 5,2.
 - Säästö pysyy välillä 4-6 laatikkoa tuhatta kappaletta kohti, kun painoraja (15, 25, 35 kg), laatikon korkeus (150, 200, 300 mm), saapumistahti (3-7 riviä tunnissa) tai jakajien käyttö muuttuu.
@@ -80,6 +80,6 @@ Sääntö käyttää 12 % vähemmän laatikoita. Se on 5,2 varastopaikkaa vähem
 2. **Ruuhkaan sääntö ja lisätyöntekijä ovat eri työkaluja.** Lisätyöntekijä lyhentää jonoja ja ylityötä tehokkaammin. Sääntö säästää lisäksi varastopaikkoja. Ne eivät sulje toisiaan pois.
 3. **Ennen päätöstä kannattaa mitata kaksi asiaa:** kuinka täysiä laatikot todellisuudessa ovat ja kauanko kappalemäärän arviointi kestää. Molemmat voi mitata muutaman päivän otannalla.
 
-**Rajoitukset.** Kaikki syötteet ovat oletuksia. Pakkaussääntö käyttää yhtä asentoa koko laatikolle, joten todellinen kapasiteetti voi olla suurempi. Pussit ja kelat käsitellään laatikon muotoisina. Malli kuvaa yhtä asemaa, eikä se sisällä hissin vikoja. Tulos on laatikoina eikä euroina. Se, kannattaako näyttö asemalle, riippuu varastopaikan hinnasta.
+**Rajoitukset.** Kaikki syötteet ovat oletuksia. Pakkaussääntö käyttää yhtä asentoa koko laatikolle, joten todellinen kapasiteetti voi olla suurempi. Mallissa silmämääräinen täyttö ei voi koskaan ylittää säännön lukua, mikä kasvattaa kookkaiden tuotteiden säästöä. Pussit käsitellään laatikon muotoisina, joten niitä mahtuu todellisuudessa enemmän. Kelat voivat pakkautua huonommin kuin laatikot. Malli kuvaa yhtä asemaa, eikä se sisällä hissin vikoja. Tulos on laatikoina eikä euroina. Se, kannattaako näyttö asemalle, riippuu varastopaikan hinnasta.
 
 **Jatkokehitys.** Seuraavaksi rakentaisin sekalaatikot (useampi tuote samassa laatikossa), oikean 3D-pakkauksen ja tuotteiden sijoittelun hyllyyn (slotting). Oikealta asiakkaalta pyytäisin tuotteiden master-datan, mitatut käsittelyajat ja varaston todellisen painorajan.

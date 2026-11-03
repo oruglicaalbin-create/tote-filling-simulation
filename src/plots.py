@@ -165,7 +165,7 @@ def fig5_sensitivity_fill() -> Path:
     bottom.fill_between(x, d["diff_ci_low"], d["diff_ci_high"], color=GREY, alpha=0.25, linewidth=0)
     bottom.plot(x, d["diff_mean"], color="#555555", linewidth=2, marker="o", markersize=4)
     bottom.set_ylabel("Overweight\nrejections per shift")
-    bottom.set_xlabel("Average fill by judgement, % of the tote's true capacity")
+    bottom.set_xlabel("Average fill aimed by judgement, % of the rule's capacity")
     return save(fig, "fig5_sensitivity_fill_factor.png")
 
 

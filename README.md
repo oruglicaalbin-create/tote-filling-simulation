@@ -22,7 +22,7 @@ The project asks two things:
 **Simulation** (`src/simulation.py`). Order lines arrive at random (Poisson, 4 lines per hour, 6 at peak). A worker takes a tote, decides how many units go in, places them and sends the tote to the lifter.
 
 - *Rule:* the worker reads the number from a screen (0.1 min).
-- *Judgement:* the worker fills a random share F of the true capacity, with F ~ triangular(0.65, 0.85, 1.10) per tote, and takes 0.5 min to decide. Mean fill is 87 %. An overweight tote is rejected by the conveyor and the worker removes units.
+- *Judgement:* the worker aims at a random share F of the rule's capacity, with F ~ triangular(0.65, 0.85, 1.10) per tote, and takes 0.5 min to decide. The mean aim is 87 %. No tote can hold more than physically fits, so an aim above 100 % only matters for heavy goods. An overweight tote is rejected by the conveyor and the worker removes units.
 - Totes hold one product. A small leftover can go into a half or a quarter of a divided tote, and one partly filled divided tote may wait at the desk for the next leftover.
 - Each replication is one 8-hour shift that starts empty, so there is no warm-up. Lines that arrive before the end are finished in overtime.
 
@@ -52,12 +52,12 @@ Every number and its source is listed in [`notes/assumptions_and_sources.md`](no
 
 ![Sensitivity to the fill factor](results/fig5_sensitivity_fill_factor.png)
 
-| Mean fill by judgement | 77 % | 82 % | 87 % (base) | 92 % | 97 % | 102 % |
+| Mean fill aimed by judgement, % of the rule's capacity | 77 % | 82 % | 87 % (base) | 92 % | 97 % | 102 % |
 |---|---|---|---|---|---|---|
 | Extra totes per 1000 units | 10.4 | 7.4 | 5.2 | 3.0 | 1.6 | 0.8 |
 | Overweight rejections per shift | 0 | 0.1 | 0.3 | 1.0 | 1.7 | 3.4 |
 
-In plain words: **if workers fill on average below about 92 % of a tote's capacity, the rule saves more than 3 storage locations per 1000 units.** Below 77 % it saves more than 10. Judgement cannot win both ways. Careful filling wastes space, and bold filling causes rejections.
+In plain words: **if workers fill on average below about 92 % of the rule's capacity, the rule saves more than 3 storage locations per 1000 units.** Below 77 % it saves more than 10. Judgement cannot win both ways. Careful filling wastes space, and bold filling causes rejections.
 
 - About **two thirds of the saving comes from bulky, volume-bound goods.** If workers filled those perfectly and only misjudged weight, the saving at 87 % fill would be 1.7 per 1000 units instead of 5.2.
 - The storage saving stays at 4-6 totes per 1000 units when max load (15 / 25 / 35 kg), tote height (150 / 200 / 300 mm), arrival rate (3-7 lines/h) or divider use change.
@@ -76,7 +76,7 @@ Other figures in `results/`: units per tote by product (fig. 1), queue length ov
 ## Limits
 
 - **All inputs are assumptions.** The catalogue is synthetic, and handling times are calibrated to a remembered 3-5 minutes per tote. The fill factor F is the most important unknown, and it should be measured before quoting a number.
-- **The packing rule is a heuristic.** One orientation per tote and a regular grid. Real workers can mix orientations, so the true capacity may be higher. Bags and coils are treated as boxes.
+- **The packing rule is a heuristic.** One orientation per tote and a regular grid. Real workers can mix orientations, so the true capacity may be higher. In the model judgement can never beat the rule's number, which makes the saving on bulky goods look larger. Soft bags are treated as boxes, which undercounts them. Round coils may pack worse than a box.
 - **One station is modelled.** Stations do not share anything except the lifter, which was never a bottleneck. Lifter faults are not modelled.
 - **The result is in totes, not money.** Whether 5 storage locations per 1000 units pay for a screen at the station depends on site costs.
 
