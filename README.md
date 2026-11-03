@@ -59,7 +59,7 @@ Every number and its source is listed in [`notes/assumptions_and_sources.md`](no
 
 In plain words: **if workers fill on average below about 92 % of a tote's capacity, the rule saves more than 3 storage locations per 1000 units.** Below 77 % it saves more than 10. Judgement cannot win both ways. Careful filling wastes space, and bold filling causes rejections.
 
-- About **two thirds of the saving comes from bulky, volume-bound goods.** If workers filled those perfectly and only misjudged weight, the saving at 87 % fill would be 1.8 per 1000 units instead of 5.2.
+- About **two thirds of the saving comes from bulky, volume-bound goods.** If workers filled those perfectly and only misjudged weight, the saving at 87 % fill would be 1.7 per 1000 units instead of 5.2.
 - The storage saving stays at 4-6 totes per 1000 units when max load (15 / 25 / 35 kg), tote height (150 / 200 / 300 mm), arrival rate (3-7 lines/h) or divider use change.
 - **The time saving rests on the assumed decision time.** At 0.5 min per tote, judgement adds 42 min of work per shift. If judging were as fast as reading a screen, it would still add 10 min, from the extra totes.
 

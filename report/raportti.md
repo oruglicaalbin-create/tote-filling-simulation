@@ -70,7 +70,7 @@ Sääntö käyttää 12 % vähemmän laatikoita. Se on 5,2 varastopaikkaa vähem
 
 - Jos työntekijät täyttävät keskimäärin alle 92 % laatikon kapasiteetista, sääntö säästää yli 3 varastopaikkaa tuhatta kappaletta kohti. Alle 77 %:n täytöllä säästö on yli 10.
 - Silmämääräinen täyttö häviää kummassakin suunnassa. Varovainen täyttö tuhlaa tilaa, ja rohkea täyttö tuottaa hylkäyksiä.
-- Noin kaksi kolmasosaa säästöstä tulee kookkaista, tilan rajoittamista tuotteista. Jos työntekijät täyttäisivät ne täydellisesti, säästö perustapauksessa olisi 1,8 eikä 5,2.
+- Noin kaksi kolmasosaa säästöstä tulee kookkaista, tilan rajoittamista tuotteista. Jos työntekijät täyttäisivät ne täydellisesti, säästö perustapauksessa olisi 1,7 eikä 5,2.
 - Säästö pysyy välillä 4-6 laatikkoa tuhatta kappaletta kohti, kun painoraja (15, 25, 35 kg), laatikon korkeus (150, 200, 300 mm), saapumistahti (3-7 riviä tunnissa) tai jakajien käyttö muuttuu.
 - Ajansäästö riippuu oletetusta päätösajasta. Puolen minuutin päätösajalla silmämääräinen täyttö lisää työtä 42 minuuttia vuorossa. Jos arviointi olisi yhtä nopeaa kuin näytön lukeminen, lisätyötä jäisi silti 10 minuuttia, koska laatikoita on enemmän.
 
