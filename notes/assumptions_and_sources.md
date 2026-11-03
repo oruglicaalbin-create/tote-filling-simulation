@@ -8,9 +8,9 @@ Status column: **open** = still to be confirmed or checked.
 
 | Parameter | Value | Why | Source | Varied in sensitivity? | Status |
 |---|---|---|---|---|---|
-| Max load | 35 kg | Upper limit of what Cuby shuttles carry | SSI Schäfer Cuby product page: https://www.ssi-schaefer.com/da-dk/produkter/lagerloesninger-optimering/fuldautomatiserede-lagerloesninger/storage-shuttle-systems/ssi-cuby-1229028 | Yes: 25 / 30 / 35 kg | |
-| Inner dimensions | 560 × 360 × 200 mm | Common 600 × 400 mm footprint tote | Assumption | Yes: two heights (value of second height open) | open |
-| Fill-height margin | 0 mm | Goods may fill up to the rim | Assumption | Not yet decided | open |
+| Max load | 15 kg base. 35 kg is the public upper limit | 35 kg is what Cuby shuttles carry. A site may set a lower limit. Albin chose 15 kg as the base (D9) | 35 kg: SSI Schäfer Cuby product page: https://www.ssi-schaefer.com/da-dk/produkter/lagerloesninger-optimering/fuldautomatiserede-lagerloesninger/storage-shuttle-systems/ssi-cuby-1229028. 15 kg: assumption | Yes: 15 / 25 / 35 kg | closed |
+| Inner dimensions | 560 × 360 × 200 mm | Common 600 × 400 mm footprint tote | Assumption | Yes: height 150 / 200 / 300 mm | closed |
+| Fill-height margin | 0 mm | Goods may fill up to the rim | Assumption | No. The tote-height sweep shows the effect of less usable height | closed |
 
 ## Packing rule
 
@@ -32,7 +32,7 @@ Status column: **open** = still to be confirmed or checked.
 - Also removed on 2026-11-01, as near-duplicates in packing terms (Albin's decision): LMP-02 (twin of LMP-01), PNL-03 (twin of PNL-01, both 4 per tote), GL-03 (twin of GL-02, same box, both weight-bound). Each removed share was added to its kept twin (LMP-01 0.05 → 0.10, PNL-01 0.02 → 0.04, GL-02 0.02 → 0.03), so the category mix stays the same.
 - Demand shares now sum to 0.97, because the three non-Cuby SKUs' shares (0.03) were dropped. The simulation normalises them to sum to 1 when it samples SKUs.
 - Inbound quantity per line: uniform integer between the min and max columns. Assumption.
-- Spot-check against public manufacturer datasheets: **open**.
+- Spot-check against public manufacturer datasheets: **not done**. Values are plausible estimates. The README and report call the catalogue synthetic.
 - Sanity check of categories by Albin: **in progress** (checklist doc, 2026-11-01). Removals above confirmed.
 
 ## Albin's answers to the open questions (2026-11-01)
@@ -64,13 +64,13 @@ All handling times are means. Each draw is gamma-distributed with CV 0.3 (assump
 | Decision, rule | 0.1 min per tote | Read the number from a screen | Assumption | No |
 | Decision, judgement | 0.5 min per tote | Look, estimate, maybe lift to feel the weight | Assumption | No |
 | Place one unit | 5 s | | Assumption | No |
-| Rework | 1.5 min + 5 s per removed unit | Tote comes back from the conveyor check, units come out, push again (D12) | Assumption, mechanism from Albin's recollection | Not yet |
+| Rework | 1.5 min + 5 s per removed unit | Tote comes back from the conveyor check, units come out, push again (D12) | Assumption, mechanism from Albin's recollection | No (rework is about 0.1 % of worker time, see below) |
 | Judgement fill factor F | triangular(0.65, 0.85, 1.10) per tote | Albin's recollection: workers underfilled. The upper tail lets about 9 % of totes be filled above capacity, so overweight happens sometimes | Assumption | **Yes, headline sweep of the mode** |
 | How F works | Worker puts round(F × n_max) units in a tote, at most what physically fits | A worker can see volume but cannot see weight. So only weight-bound SKUs can be overweight | Modelling choice | No |
 | Overweight rework | Units removed until the tote is under the limit | Simplification: after rework the tote is exactly at the weight bound | Modelling choice | No |
 | Dividers | Three layouts: half across the length (2 × 280 × 360 × 200 mm), half along the length (2 × 560 × 180 × 200 mm), quarters (4 × 280 × 180 × 200 mm). Divider thickness ignored | **Albin's recollection (2026-11-01, when asked):** both dividers were used "if the circumstances were right" | Albin's recollection, sizes are assumptions | Yes: none / halves / all |
 | Compartment capacity | Packing rule on the compartment. The weight limit stays the whole tote's (15 kg) | Same grid rule as a full tote | Modelling choice | With max load |
-| Which layout | A leftover goes into the smallest compartment it fits: a quarter, then the bigger half. A leftover that fits no compartment gets its own tote | Greedy, easy to show on a screen | Modelling choice | Not yet |
+| Which layout | A leftover goes into the smallest compartment it fits: a quarter, then the bigger half. A leftover that fits no compartment gets its own tote | Greedy, easy to show on a screen | Modelling choice | No |
 | Waiting tote | A partly filled divided tote waits at the desk for the next leftover that fits a free compartment and keeps the weight OK (exact for the rule, F × limit for judgement). Base: one can wait at a time. If a leftover needs a new tote and the desk is full, the waiting tote with the fewest empty compartments is sent. With two waiting totes, a leftover goes into the one with the smallest compartment that fits | **Albin's recollection (when asked):** a partly filled divided tote could wait at the desk. One at a time is Albin's simplification | Albin's recollection + assumption | Yes: 1 / 2 waiting totes (D14) |
 | How often dividers are used | Whenever a leftover fits in a half, in both scenarios | Albin said "sometimes". Using the same policy in both scenarios keeps the rule-vs-judgement difference about filling only | Assumption | On / off |
 | Lifter | 9 s per tote (400 cycles/h), buffer 10 totes | 2016 press figure, indicative only. Albin's recollection: never a bottleneck | Public figure + Albin's recollection | No |
